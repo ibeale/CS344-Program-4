@@ -26,7 +26,6 @@ int findIndex(char* arr, char letter){
 char* encryptPlaintext(char* buffer, char* plaintext, char* key){
     int lenPT = strlen(plaintext);
     int lenK = strlen(key);
-    memset(buffer, '\0',11);
     if(lenPT > lenK){fprintf(stderr,"Plaintext is too long for the key provided.\n"); return NULL;}
     int i = 0;
     char letters[28] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
@@ -35,20 +34,18 @@ char* encryptPlaintext(char* buffer, char* plaintext, char* key){
         if(idx == -1){fprintf(stderr,"Plaintext contains uncompatible characters.\n"); return NULL;}
         else{
             char new_letter_idx = findIndex(letters, letters[((idx + findIndex(letters, key[i]))%27)]);
-            printf("newidx: %d\n", new_letter_idx);
             // printf("%c -> %c\n", plaintext[i], key[new_letter_idx]);
             buffer[i] = letters[new_letter_idx];
         }
     }
     buffer[i] = '\0';
-    printf("%s\n", buffer);
     return buffer;
 }
 
 char* unencryptCiphertext(char* buffer, char* ciphertext, char* key){
     int lenPT = strlen(ciphertext);
     int lenK = strlen(key);
-    memset(buffer, '\0',11);
+    memset(buffer, '\0',sizeof(buffer));
     if(lenPT > lenK){fprintf(stderr,"ciphertext is too long for the key provided.\n"); return NULL;}
     int i = 0;
     char letters[28] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
@@ -58,13 +55,11 @@ char* unencryptCiphertext(char* buffer, char* ciphertext, char* key){
         else{
             int sum = idx - findIndex(letters, key[i]);
             char new_letter_idx = findIndex(letters, letters[((sum%27)+27)%27]); // custom mod function to work on negatives
-            printf("newidx: %d\n", new_letter_idx);
             // printf("%c -> %c\n", ciphertext[i], key[new_letter_idx]);
             buffer[i] = letters[new_letter_idx];
         }
     }
     buffer[i] = '\0';
-    printf("%s\n", buffer);
     return buffer;
 }
 
@@ -93,7 +88,7 @@ int main(int argc, char *argv[])
 	struct hostent* serverHostInfo;
 	char plaintext[100000];
 	char key[100000];
-    char buffer[256];
+    char buffer[100000];
     if(checkUsage(argc, argv, &portNumber)){exit(0);}; // If bad input, exit(0)
 
 	// Set up the server address struct
@@ -109,34 +104,81 @@ int main(int argc, char *argv[])
 	if (socketFD < 0) error("CLIENT: ERROR opening socket");
 	
 	// Connect to server
-    if (connect(socketFD, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) // Connect socket to address
+    
+    memset(key, '\0', sizeof(key));
+    if(strcmp("post", argv[1]) == 0){
+        memset(plaintext, '\0', sizeof(plaintext)); // Clear out the buffer array
+        memset(buffer, '\0', sizeof(buffer));
+        FILE* fp = fopen(argv[3], "r");
+        FILE* keyfp = fopen(argv[4], "r");
+        char character = fgetc(keyfp); // Get input from the user, trunc to buffer - 1 chars, leaving \0
+        int i=0;
+        while(character != '\n' && character != EOF){
+            key[i] = character;
+            character = fgetc(keyfp);
+            i++;
+        }
+
+        character = fgetc(fp); // Get input from the user, trunc to buffer - 1 chars, leaving \0
+        i=0;
+        while(character != '\n' && character != EOF){
+            plaintext[i] = character;
+            character = fgetc(fp);
+            i++;
+        }
+        // printf("%s\n", plaintext);
+        if(encryptPlaintext(plaintext, plaintext, key) == NULL){exit(0);}
+        strcpy(buffer, argv[1]);
+        strcat(buffer, " ");
+        strcat(buffer, argv[2]);
+        strcat(buffer, " ");
+        strcat(buffer, plaintext);
+        // printf("%s\n",buffer);
+        fclose(fp);
+        if (connect(socketFD, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) // Connect socket to address
         error("CLIENT: ERROR connecting");
-
-
-    memset(plaintext, '\0', sizeof(plaintext)); // Clear out the buffer array
-    FILE* fp = fopen(argv[3], "r");
-
-    char character = fgetc(fp); // Get input from the user, trunc to buffer - 1 chars, leaving \0
-    int i=0;
-    while(character != '\n' && character != EOF){
-        plaintext[i] = character;
-        character = fgetc(fp);
-        i++;
+        // Send message to server
+        charsWritten = send(socketFD, buffer, strlen(buffer), 0); // Write to the server
+        if (charsWritten < 0) error("CLIENT: ERROR writing to socket");
+        if (charsWritten < strlen(buffer)) printf("CLIENT: WARNING: Not all data written to socket!\n");
+        close(socketFD); // Close the socket
     }
-    // printf("%s\n",plaintext);
-    fclose(fp);
+    else{
+        FILE* keyfp = fopen(argv[3], "r");
+        char character = fgetc(keyfp); // Get input from the user, trunc to buffer - 1 chars, leaving \0
+        int i=0;
+        while(character != '\n' && character != EOF){
+            key[i] = character;
+            character = fgetc(keyfp);
+            i++;
+        }
+        memset(buffer, '\0', sizeof(buffer));
+        strcpy(buffer, argv[1]);
+        strcat(buffer, " ");
+        strcat(buffer, argv[2]);
+        if (connect(socketFD, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) // Connect socket to address
+        error("CLIENT: ERROR connecting");
+        // Send message to server
+        charsWritten = send(socketFD, buffer, strlen(buffer), 0); // Write to the server
+        if (charsWritten < 0) error("CLIENT: ERROR writing to socket");
+        if (charsWritten < strlen(buffer)) printf("CLIENT: WARNING: Not all data written to socket!\n");
+        memset(buffer, '\0', sizeof(buffer)); // Clear out the buffer again for reuse
+        charsRead = recv(socketFD, buffer, sizeof(buffer) - 1, 0); // Read data from the socket, leaving \0 at end
+        if (charsRead < 0) error("CLIENT: ERROR reading from socket");
+        if(strcmp("SERVER: No user found by that name", buffer)){
+            memset(plaintext, '\0', sizeof(plaintext)); // Clear out the buffer array
+            unencryptCiphertext(plaintext, buffer, key);
+            printf("CLIENT: I received this from the server: \"%s\"\n", plaintext);
+        }
+        else if(strcmp(buffer, "")){
+            ;
+        }
+        else{printf("CLIENT: I received this from the server: \"%s\"\n", buffer);}
+        close(socketFD); // Close the socket
+    }
 
-    // Send message to server
-    charsWritten = send(socketFD, plaintext, strlen(plaintext), 0); // Write to the server
-    if (charsWritten < 0) error("CLIENT: ERROR writing to socket");
-    if (charsWritten < strlen(plaintext)) printf("CLIENT: WARNING: Not all data written to socket!\n");
+        
 
-    // Get return message from server
-    memset(plaintext, '\0', sizeof(plaintext)); // Clear out the buffer again for reuse
-    charsRead = recv(socketFD, plaintext, sizeof(plaintext) - 1, 0); // Read data from the socket, leaving \0 at end
-    if (charsRead < 0) error("CLIENT: ERROR reading from socket");
-    printf("CLIENT: I received this from the server: \"%s\"\n", plaintext);
-
-	close(socketFD); // Close the socket
+    
 	return 0;
 }

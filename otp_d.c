@@ -7,6 +7,9 @@
 #include <netinet/in.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 pid_t processes[5] = {-5,-5,-5,-5,-5};
 
@@ -33,6 +36,7 @@ void error(const char *msg) { perror(msg); exit(1); } // Error function used for
 
 int main(int argc, char *argv[])
 {
+	srand(time(NULL));
 	signal(SIGINT, killChildProcesses);
 	int listenSocketFD, establishedConnectionFD, portNumber, charsRead;
 	socklen_t sizeOfClientInfo;
@@ -74,20 +78,81 @@ int main(int argc, char *argv[])
 		case 0:
 			while(1){
 				signal(SIGINT, intHandlerChild);
-				sleep(2);
 				sizeOfClientInfo = sizeof(clientAddress); // Get the size of the address for the client that will connect
 				establishedConnectionFD = accept(listenSocketFD, (struct sockaddr *)&clientAddress, &sizeOfClientInfo); // Accept
+				sleep(2);
 				if (establishedConnectionFD < 0) error("ERROR on accept");
 
 				// Get the message from the client and display it
-				memset(buffer, '\0', 256);
+				memset(buffer, '\0', sizeof(buffer));
 				charsRead = recv(establishedConnectionFD, buffer, sizeof(buffer), 0); // Read the client's message from the socket
 				if (charsRead < 0) error("ERROR reading from socket");
-				printf("SERVER Process %d: I received this from the client: \"%s\"\n",i, buffer);
+				// printf("SERVER Process %d: I received this from the client: \"%s\"\n",i, buffer);
+				char* ptr = strtok(buffer, " ");
+				char* username = strtok(NULL, " ");
+				if(strcmp(ptr, "get") == 0){
+					struct dirent* de; // Adapted from geeksforgeeks.org/c-program-list-files-sub-directories-directory/
+					DIR* dr = opendir(username);
+					if(dr == NULL){
+						strcpy(buffer, "SERVER: No user found by that name");
+						charsRead = send(establishedConnectionFD, buffer, sizeof(buffer), 0); // Send success back
+						if (charsRead < 0) error("ERROR writing to socket");
+						break;
+					}
+					else{
+						char buf[100];
+						time_t oldest = INT64_MAX;
+						struct stat file_info;
+						char path[100];
+						memset(path, '\0', sizeof(path));
+						while ((de = readdir(dr)) != NULL){
+							if(strcmp(de->d_name, ".") && strcmp(de->d_name, "..")){
+								memset(buf, '\0', sizeof(buf));
+								sprintf(buf, "./%s/%s", username, de->d_name);
+								stat(buf, &file_info);
+								if(S_ISREG(file_info.st_mode)){
+									if(file_info.st_mtime < oldest){
+										oldest = file_info.st_mtime;
+										memset(path, '\0', sizeof(path));
+										strcpy(path, buf);
+									}
+								}
+							}
+						}
+						if(path[0]==0){
+							strcpy(buffer, "SERVER: No messages found for that user.");
+							charsRead = send(establishedConnectionFD, buffer, sizeof(buffer), 0); // Send success back
+							if (charsRead < 0) error("ERROR writing to socket");
+							break;
+						}
+						FILE* fp = fopen(path, "r");
+						char character = fgetc(fp); // Get input from the user, trunc to buffer - 1 chars, leaving \0
+						int i=0;
+						while(character != '\n' && character != EOF){
+							buffer[i] = character;
+							character = fgetc(fp);
+							i++;
+						}
+						fclose(fp);
+						remove(path);
+						// Send a Success message back to the client
+						charsRead = send(establishedConnectionFD, buffer, sizeof(buffer), 0); // Send success back
+						if (charsRead < 0) error("ERROR writing to socket");
+					}
+				}
+				else{
+					char relpath[100];
+					memset(relpath, '\0', sizeof(relpath));
+					mkdir(username, 0755);
+					int filename = rand()%999999;
+					printf("./%s/%d", username, filename);
+					sprintf(relpath, "./%s/%d", username, filename);
+					FILE* fp = fopen(relpath, "w");
+					int messagepos = strlen(username) + strlen(ptr) + 2;
+					fprintf(fp, "%s\n", buffer + messagepos);
+					fclose(fp);
+				}
 
-				// Send a Success message back to the client
-				charsRead = send(establishedConnectionFD, "I am the server, and I got your message", 39, 0); // Send success back
-				if (charsRead < 0) error("ERROR writing to socket");
 				close(establishedConnectionFD); // Close the existing socket which is connected to the client
 			}
 		default:
