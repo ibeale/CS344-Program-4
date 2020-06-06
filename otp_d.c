@@ -120,11 +120,14 @@ int main(int argc, char *argv[])
 							}
 						}
 						if(path[0]==0){
+							printf("SERVER: No messages found for that user.\n");
+							fflush(stdout);
 							strcpy(buffer, "SERVER: No messages found for that user.");
 							charsRead = send(establishedConnectionFD, buffer, sizeof(buffer), 0); // Send success back
 							if (charsRead < 0) error("ERROR writing to socket");
 							break;
 						}
+						// printf("%s", path);
 						FILE* fp = fopen(path, "r");
 						char character = fgetc(fp); // Get input from the user, trunc to buffer - 1 chars, leaving \0
 						int i=0;
@@ -145,7 +148,8 @@ int main(int argc, char *argv[])
 					memset(relpath, '\0', sizeof(relpath));
 					mkdir(username, 0755);
 					int filename = rand()%999999;
-					printf("./%s/%d", username, filename);
+					printf("./%s/%d\n", username, filename);
+					fflush(stdout);
 					sprintf(relpath, "./%s/%d", username, filename);
 					FILE* fp = fopen(relpath, "w");
 					int messagepos = strlen(username) + strlen(ptr) + 2;

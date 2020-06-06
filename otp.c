@@ -26,12 +26,12 @@ int findIndex(char* arr, char letter){
 char* encryptPlaintext(char* buffer, char* plaintext, char* key){
     int lenPT = strlen(plaintext);
     int lenK = strlen(key);
-    if(lenPT > lenK){fprintf(stderr,"Plaintext is too long for the key provided.\n"); return NULL;}
+    if(lenPT > lenK){printf("Plaintext is too long for the key provided.\n"); return NULL;}
     int i = 0;
     char letters[28] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
     for(i;i<lenPT;i++){
         int idx =findIndex(letters, plaintext[i]);
-        if(idx == -1){fprintf(stderr,"Plaintext contains uncompatible characters.\n"); return NULL;}
+        if(idx == -1){printf("Plaintext contains uncompatible characters.\n"); return NULL;}
         else{
             char new_letter_idx = findIndex(letters, letters[((idx + findIndex(letters, key[i]))%27)]);
             // printf("%c -> %c\n", plaintext[i], key[new_letter_idx]);
@@ -46,12 +46,12 @@ char* unencryptCiphertext(char* buffer, char* ciphertext, char* key){
     int lenPT = strlen(ciphertext);
     int lenK = strlen(key);
     memset(buffer, '\0',sizeof(buffer));
-    if(lenPT > lenK){fprintf(stderr,"ciphertext is too long for the key provided.\n"); return NULL;}
+    if(lenPT > lenK){printf("ciphertext is too long for the key provided.\n"); return NULL;}
     int i = 0;
     char letters[28] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
     for(i;i<lenPT;i++){
         int idx =findIndex(letters, ciphertext[i]);
-        if(idx == -1){fprintf(stderr,"ciphertext contains uncompatible characters.\n"); return NULL;}
+        if(idx == -1){printf("ciphertext contains uncompatible characters.\n"); return NULL;}
         else{
             int sum = idx - findIndex(letters, key[i]);
             char new_letter_idx = findIndex(letters, letters[((sum%27)+27)%27]); // custom mod function to work on negatives
@@ -128,6 +128,7 @@ int main(int argc, char *argv[])
         }
         // printf("%s\n", plaintext);
         if(encryptPlaintext(plaintext, plaintext, key) == NULL){exit(0);}
+        printf("%s\n",plaintext);
         strcpy(buffer, argv[1]);
         strcat(buffer, " ");
         strcat(buffer, argv[2]);
@@ -165,15 +166,16 @@ int main(int argc, char *argv[])
         memset(buffer, '\0', sizeof(buffer)); // Clear out the buffer again for reuse
         charsRead = recv(socketFD, buffer, sizeof(buffer) - 1, 0); // Read data from the socket, leaving \0 at end
         if (charsRead < 0) error("CLIENT: ERROR reading from socket");
-        if(strcmp("SERVER: No user found by that name", buffer)){
+        if(strcmp("SERVER: No user found by that name", buffer) && strcmp(buffer,"SERVER: No messages found for that user.")){
             memset(plaintext, '\0', sizeof(plaintext)); // Clear out the buffer array
             unencryptCiphertext(plaintext, buffer, key);
-            printf("CLIENT: I received this from the server: \"%s\"\n", plaintext);
+            
+            printf("%s\n", plaintext);
         }
-        else if(strcmp(buffer, "")){
-            ;
+        else if(strcmp(buffer, "")==0){
+            printf("Nothing recieved from the server.\n");
         }
-        else{printf("CLIENT: I received this from the server: \"%s\"\n", buffer);}
+        else{printf("%s\n", buffer);}
         close(socketFD); // Close the socket
     }
 

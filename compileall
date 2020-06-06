@@ -1,3 +1,4 @@
 #!/bin/bash
 gcc otp.c -o otp
 gcc otp_d.c -o otp_d -g
+gcc keygen.c -o keygen
